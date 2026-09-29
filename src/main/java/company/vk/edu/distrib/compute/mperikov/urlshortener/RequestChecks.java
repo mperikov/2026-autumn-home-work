@@ -4,6 +4,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 final class RequestChecks {
+    static final String GET = "GET";
+    static final String POST = "POST";
     static final String STATUS_PATH = "/v0/status";
     static final String USERS_PATH = "/internal/users";
     static final String LINKS_PATH = "/v0/links";
@@ -13,8 +15,8 @@ final class RequestChecks {
     }
 
     static boolean isPublic(String method, String path) {
-        return ("GET".equals(method) && STATUS_PATH.equals(path))
-            || ("POST".equals(method) && USERS_PATH.equals(path))
+        return (GET.equals(method) && STATUS_PATH.equals(path))
+            || (POST.equals(method) && USERS_PATH.equals(path))
             || isRedirectPath(method, path);
     }
 
@@ -40,6 +42,6 @@ final class RequestChecks {
     }
 
     static boolean isRedirectPath(String method, String path) {
-        return "GET".equals(method) && path.startsWith("/") && path.length() > 1 && path.indexOf('/', 1) < 0;
+        return GET.equals(method) && path.startsWith("/") && path.length() > 1 && path.indexOf('/', 1) < 0;
     }
 }

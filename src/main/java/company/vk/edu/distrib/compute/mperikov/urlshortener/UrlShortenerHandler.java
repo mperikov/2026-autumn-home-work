@@ -25,7 +25,9 @@ final class UrlShortenerHandler implements HttpHandler {
             try {
                 route(exchange);
             } catch (Exception ex) {
-                log.warn("Failed to handle {} {}", exchange.getRequestMethod(), exchange.getRequestURI(), ex);
+                if (log.isWarnEnabled()) {
+                    log.warn("Failed to handle {} {}", exchange.getRequestMethod(), exchange.getRequestURI(), ex);
+                }
                 HttpReplies.sendServerError(exchange);
             }
         }
@@ -34,30 +36,55 @@ final class UrlShortenerHandler implements HttpHandler {
     private void route(HttpExchange exchange) throws IOException {
         String method = exchange.getRequestMethod();
         String path = HttpReplies.requestPath(exchange);
-        if (!RequestChecks.isPublic(method, path) && !authenticator.authorized(exchange)) {
+        if (isUnauthorized(exchange, method, path)) {
             HttpReplies.sendUnauthorized(exchange);
             return;
         }
-        if ("GET".equals(method) && RequestChecks.STATUS_PATH.equals(path)) {
-            HttpReplies.sendEmpty(exchange, HttpStatus.OK);
-            return;
-        }
-        if ("POST".equals(method) && RequestChecks.USERS_PATH.equals(path)) {
-            authenticator.createUser(exchange);
-            return;
-        }
-        if ("POST".equals(method) && RequestChecks.LINKS_PATH.equals(path)) {
-            links.create(exchange);
-            return;
-        }
-        if (path.startsWith(RequestChecks.LINKS_PREFIX)) {
-            links.handleItem(exchange, method, path.substring(RequestChecks.LINKS_PREFIX.length()));
-            return;
-        }
-        if (RequestChecks.isRedirectPath(method, path)) {
-            links.redirect(exchange, path.substring(1));
+        if (dispatch(exchange, method, path)) {
             return;
         }
         HttpReplies.sendEmpty(exchange, HttpStatus.NOT_FOUND);
+    }
+
+    private boolean isUnauthorized(HttpExchange exchange, String method, String path) throws IOException {
+        return !RequestChecks.isPublic(method, path) && !authenticator.authorized(exchange);
+    }
+
+    private boolean dispatch(HttpExchange exchange, String method, String path) throws IOException {
+        return serveStatus(exchange, method, path)
+            || serveUsers(exchange, method, path)
+            || serveLinks(exchange, method, path);
+    }
+
+    private boolean serveStatus(HttpExchange exchange, String method, String path) throws IOException {
+        if (RequestChecks.GET.equals(method) && RequestChecks.STATUS_PATH.equals(path)) {
+            HttpReplies.sendEmpty(exchange, HttpStatus.OK);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean serveUsers(HttpExchange exchange, String method, String path) throws IOException {
+        if (RequestChecks.POST.equals(method) && RequestChecks.USERS_PATH.equals(path)) {
+            authenticator.createUser(exchange);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean serveLinks(HttpExchange exchange, String method, String path) throws IOException {
+        if (RequestChecks.POST.equals(method) && RequestChecks.LINKS_PATH.equals(path)) {
+            links.create(exchange);
+            return true;
+        }
+        if (path.startsWith(RequestChecks.LINKS_PREFIX)) {
+            links.handleItem(exchange, method, path.substring(RequestChecks.LINKS_PREFIX.length()));
+            return true;
+        }
+        if (RequestChecks.isRedirectPath(method, path)) {
+            links.redirect(exchange, path.substring(1));
+            return true;
+        }
+        return false;
     }
 }
