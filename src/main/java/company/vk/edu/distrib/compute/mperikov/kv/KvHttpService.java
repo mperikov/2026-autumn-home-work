@@ -64,11 +64,11 @@ final class KvHttpService implements KVService {
     }
 
     private void stopWorkers() {
-        if (workers == null) {
+        ExecutorService pool = workers;
+        if (pool == null) {
             return;
         }
-        workers.shutdown();
-        workers = null;
+        pool.shutdown();
     }
 
     private void closeEntities() {
