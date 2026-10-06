@@ -2,6 +2,7 @@ package company.vk.edu.distrib.compute.test;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -34,6 +35,7 @@ public enum TestUtils {
     public static final Credentials SPOTTY_TEST_CREDENTIALS = new Credentials("spotty", "tasty bones");
 
     public static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(2);
+    private static final String LOCAL_URL = "http://localhost:%d%s";
 
     public static int randomPort(int... excludes) {
         Arrays.sort(excludes);
@@ -64,13 +66,21 @@ public enum TestUtils {
     }
 
     public static void runHttpCtx(HttpClient client, int port, Executable executable) {
-        ScopedValue.where(HTTP_CONTEXT, new HttpContext(client, port)).run(() -> {
-            try {
-                executable.execute();
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
+        ScopedValue.where(HTTP_CONTEXT, new HttpContext(client, port)).run(() -> execute(executable));
+    }
+
+    private static void execute(Executable executable) {
+        try {
+            Executable.class.getMethod("execute").invoke(executable);
+        } catch (InvocationTargetException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof Error error) {
+                throw error;
             }
-        });
+            throw new IllegalStateException(cause);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     public static int status() {
@@ -101,7 +111,7 @@ public enum TestUtils {
             HttpContext httpContext = HTTP_CONTEXT.get();
             HttpRequest.Builder request = HttpRequest.newBuilder()
                 .GET()
-                .uri(new URI("http://localhost:%d%s".formatted(httpContext.port(), path)))
+                .uri(new URI(LOCAL_URL.formatted(httpContext.port(), path)))
                 .timeout(REQUEST_TIMEOUT);
             if (credentials != null) {
                 withAuthorization(request, credentials);
@@ -129,7 +139,7 @@ public enum TestUtils {
             HttpContext httpContext = HTTP_CONTEXT.get();
             HttpRequest.Builder request = HttpRequest.newBuilder()
                 .PUT(HttpRequest.BodyPublishers.ofInputStream(bodySupplier))
-                .uri(new URI("http://localhost:%d%s".formatted(httpContext.port(), path)))
+                .uri(new URI(LOCAL_URL.formatted(httpContext.port(), path)))
                 .header("Content-Type", CONTENT_TYPE_TEXT)
                 .timeout(REQUEST_TIMEOUT);
             if (credentials != null) {
@@ -150,7 +160,7 @@ public enum TestUtils {
             final var httpContext = HTTP_CONTEXT.get();
             HttpRequest.Builder request = HttpRequest.newBuilder()
                 .DELETE()
-                .uri(new URI("http://localhost:%d%s".formatted(httpContext.port(), path)))
+                .uri(new URI(LOCAL_URL.formatted(httpContext.port(), path)))
                 .timeout(REQUEST_TIMEOUT);
             if (credentials != null) {
                 withAuthorization(request, credentials);
@@ -170,7 +180,7 @@ public enum TestUtils {
             HttpContext httpContext = HTTP_CONTEXT.get();
             HttpRequest.Builder request = HttpRequest.newBuilder()
                 .POST(HttpRequest.BodyPublishers.ofString(value))
-                .uri(new URI("http://localhost:%d%s".formatted(httpContext.port(), path)))
+                .uri(new URI(LOCAL_URL.formatted(httpContext.port(), path)))
                 .header("Content-Type", CONTENT_TYPE_TEXT)
                 .timeout(REQUEST_TIMEOUT);
             if (credentials != null) {

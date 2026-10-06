@@ -54,7 +54,7 @@ class LinksApiTest {
     }
 
     public static HttpResponse<String> getLinks(String id, TestUtils.Credentials credentials) {
-        return TestUtils.get(credentials, LINKS_PATH + id, String.class);
+        return get(credentials, LINKS_PATH + id, String.class);
     }
 
     public static HttpResponse<Void> updateLink(String id, String longLink) {
