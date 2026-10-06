@@ -1,4 +1,4 @@
-package company.vk.edu.distrib.compute.test;
+package company.vk.edu.distrib.compute.test.urlshortener;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
@@ -10,12 +10,11 @@ import java.util.stream.Stream;
 
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.ArgumentsProvider;
 import org.junit.jupiter.params.support.ParameterDeclarations;
 import org.junit.platform.commons.support.scanning.ClassFilter;
 import org.junit.platform.commons.util.ReflectionUtils;
 
-public class AbstractArgumentsProvider implements ArgumentsProvider {
+public class AbstractArgumentsProvider {
 
     private final Collection<Class<?>> factories;
     private final Class<?> factoryClass;
