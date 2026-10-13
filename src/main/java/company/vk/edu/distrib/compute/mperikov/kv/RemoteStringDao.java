@@ -11,15 +11,22 @@ import java.time.Duration;
 import java.util.NoSuchElementException;
 
 import company.vk.edu.distrib.compute.Dao;
+import company.vk.edu.distrib.compute.kv.KVService;
 
 final class RemoteStringDao implements Dao<String> {
     private static final Duration TIMEOUT = Duration.ofSeconds(2);
 
-    private final int port;
+    private final int[] ports;
+    private final KVService[] ownedNodes;
     private final HttpClient client = HttpClient.newHttpClient();
 
-    RemoteStringDao(int port) {
-        this.port = port;
+    RemoteStringDao(int... ports) {
+        this(ports, new KVService[0]);
+    }
+
+    RemoteStringDao(int[] ports, KVService... ownedNodes) {
+        this.ports = ports.clone();
+        this.ownedNodes = ownedNodes.clone();
     }
 
     @Override
@@ -55,7 +62,15 @@ final class RemoteStringDao implements Dao<String> {
 
     @Override
     public void close() {
+        for (KVService node : ownedNodes) {
+            node.stop();
+        }
         client.close();
+    }
+
+    private int portFor(String key) {
+        int slot = Math.floorMod(key.hashCode(), ports.length);
+        return ports[slot];
     }
 
     private HttpResponse<byte[]> send(String method, String key, byte[] body) throws IOException {
@@ -82,7 +97,7 @@ final class RemoteStringDao implements Dao<String> {
 
     private URI entityUri(String key) {
         String encoded = URLEncoder.encode(key, StandardCharsets.UTF_8);
-        return URI.create("http://localhost:" + port + "/v0/entity?id=" + encoded);
+        return URI.create("http://localhost:" + portFor(key) + "/v0/entity?id=" + encoded);
     }
 
     private static void checkKey(String key) {

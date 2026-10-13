@@ -42,14 +42,17 @@ final class KvHandler implements HttpHandler {
             return;
         }
         if (KvCodes.isEntity(path)) {
-            serveEntity(exchange, method);
+            serveEntity(exchange, method, path);
             return;
         }
         sendEmpty(exchange, KvCodes.NOT_FOUND);
     }
 
-    private void serveEntity(HttpExchange exchange, String method) throws IOException {
-        String id = KvCodes.entityId(exchange.getRequestURI().getRawQuery());
+    private void serveEntity(HttpExchange exchange, String method, String path) throws IOException {
+        String id = KvCodes.pathId(path);
+        if (id.isEmpty()) {
+            id = KvCodes.entityId(exchange.getRequestURI().getRawQuery());
+        }
         if (id.isEmpty()) {
             sendEmpty(exchange, KvCodes.BAD_REQUEST);
             return;

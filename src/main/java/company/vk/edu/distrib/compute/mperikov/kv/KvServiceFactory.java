@@ -12,15 +12,15 @@ import company.vk.edu.distrib.compute.kv.KVServiceTest;
 public final class KvServiceFactory extends AbstractHttpServiceFactory<KVService> {
     @Override
     protected KVService doCreate(int port) throws IOException {
-        Dao<byte[]> entities = new ByteFileDao(storageDirectory());
+        Dao<byte[]> entities = new ByteFileDao(storageDirectory(port));
         return new KvHttpService(port, entities);
     }
 
-    private static Path storageDirectory() throws IOException {
+    private static Path storageDirectory(int port) throws IOException {
         String tmpDir = System.getProperty("java.io.tmpdir");
         if (tmpDir == null || tmpDir.isBlank()) {
             throw new IOException("java.io.tmpdir is not set");
         }
-        return Path.of(tmpDir, "mperikov-kv");
+        return Path.of(tmpDir, "mperikov-kv", Integer.toString(port));
     }
 }

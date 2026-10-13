@@ -11,6 +11,7 @@ final class KvCodes {
     static final String DELETE = "DELETE";
     static final String STATUS_PATH = "/v0/status";
     static final String ENTITY_PATH = "/v0/entity";
+    static final String ENTITY_PREFIX = "/v0/entity/";
     static final String ID = "id";
     static final int OK = 200;
     static final int CREATED = 201;
@@ -27,7 +28,14 @@ final class KvCodes {
     }
 
     static boolean isEntity(String path) {
-        return ENTITY_PATH.equals(path);
+        return ENTITY_PATH.equals(path) || path.startsWith(ENTITY_PREFIX);
+    }
+
+    static String pathId(String path) {
+        if (!path.startsWith(ENTITY_PREFIX)) {
+            return "";
+        }
+        return decode(path.substring(ENTITY_PREFIX.length()));
     }
 
     static String entityId(@Nullable String query) {
