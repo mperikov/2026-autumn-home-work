@@ -46,7 +46,7 @@ public final class UrlShortenerHttpService implements UrlShortenerService {
     public void stop() {
         try {
             if (started) {
-                server.stop(0);
+                server.stop(5);
             }
         } finally {
             closeDao(links);
