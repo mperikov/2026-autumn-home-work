@@ -14,11 +14,13 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import company.vk.edu.distrib.compute.Dao;
 
 public final class FileStringDao implements Dao<String> {
     private final Path file;
+    private final ReentrantLock lock = new ReentrantLock();
     private final Map<String, String> entries = new ConcurrentHashMap<>();
 
     public FileStringDao(Path storageFile) throws IOException {
@@ -27,49 +29,69 @@ public final class FileStringDao implements Dao<String> {
     }
 
     @Override
-    public synchronized String get(String key) throws NoSuchElementException, IllegalArgumentException, IOException {
+    public String get(String key) throws NoSuchElementException, IllegalArgumentException, IOException {
         checkKey(key);
-        String stored = entries.get(key);
-        if (stored == null) {
-            throw new NoSuchElementException("Key is not stored");
-        }
-        return stored;
-    }
-
-    @Override
-    public synchronized void upsert(String key, String value) throws IllegalArgumentException, IOException {
-        checkKey(key);
-        String previous = entries.put(key, value);
+        lock.lock();
         try {
-            save();
-        } catch (IOException ex) {
-            if (previous == null) {
-                entries.remove(key);
-            } else {
-                entries.put(key, previous);
+            String stored = entries.get(key);
+            if (stored == null) {
+                throw new NoSuchElementException("Key is not stored");
             }
-            throw ex;
+            return stored;
+        } finally {
+            lock.unlock();
         }
     }
 
     @Override
-    public synchronized void delete(String key) throws IllegalArgumentException, IOException {
+    public void upsert(String key, String value) throws IllegalArgumentException, IOException {
         checkKey(key);
-        String removed = entries.remove(key);
-        if (removed == null) {
-            return;
-        }
+        lock.lock();
         try {
-            save();
-        } catch (IOException ex) {
-            entries.put(key, removed);
-            throw ex;
+            String previous = entries.put(key, value);
+            try {
+                save();
+            } catch (IOException ex) {
+                if (previous == null) {
+                    entries.remove(key);
+                } else {
+                    entries.put(key, previous);
+                }
+                throw ex;
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
     @Override
-    public synchronized void close() {
-        entries.clear();
+    public void delete(String key) throws IllegalArgumentException, IOException {
+        checkKey(key);
+        lock.lock();
+        try {
+            String removed = entries.remove(key);
+            if (removed == null) {
+                return;
+            }
+            try {
+                save();
+            } catch (IOException ex) {
+                entries.put(key, removed);
+                throw ex;
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public void close() {
+        lock.lock();
+        try {
+            entries.clear();
+        } finally {
+            lock.unlock();
+        }
     }
 
     private static void checkKey(String key) {
