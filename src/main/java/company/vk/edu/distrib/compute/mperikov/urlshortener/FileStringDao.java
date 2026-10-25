@@ -3,10 +3,13 @@ package company.vk.edu.distrib.compute.mperikov.urlshortener;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
@@ -24,7 +27,7 @@ public final class FileStringDao implements Dao<String> {
     }
 
     @Override
-    public String get(String key) throws NoSuchElementException, IllegalArgumentException, IOException {
+    public synchronized String get(String key) throws NoSuchElementException, IllegalArgumentException, IOException {
         checkKey(key);
         String stored = entries.get(key);
         if (stored == null) {
@@ -34,22 +37,38 @@ public final class FileStringDao implements Dao<String> {
     }
 
     @Override
-    public void upsert(String key, String value) throws IllegalArgumentException, IOException {
+    public synchronized void upsert(String key, String value) throws IllegalArgumentException, IOException {
         checkKey(key);
-        entries.put(key, value);
-        save();
-    }
-
-    @Override
-    public void delete(String key) throws IllegalArgumentException, IOException {
-        checkKey(key);
-        if (entries.remove(key) != null) {
+        String previous = entries.put(key, value);
+        try {
             save();
+        } catch (IOException ex) {
+            if (previous == null) {
+                entries.remove(key);
+            } else {
+                entries.put(key, previous);
+            }
+            throw ex;
         }
     }
 
     @Override
-    public void close() {
+    public synchronized void delete(String key) throws IllegalArgumentException, IOException {
+        checkKey(key);
+        String removed = entries.remove(key);
+        if (removed == null) {
+            return;
+        }
+        try {
+            save();
+        } catch (IOException ex) {
+            entries.put(key, removed);
+            throw ex;
+        }
+    }
+
+    @Override
+    public synchronized void close() {
         entries.clear();
     }
 
@@ -77,17 +96,26 @@ public final class FileStringDao implements Dao<String> {
 
     private void save() throws IOException {
         Path parent = file.getParent();
-        if (parent == null) {
+        Path name = file.getFileName();
+        if (parent == null || name == null) {
             throw new IOException("Storage path has no parent directory");
         }
         Files.createDirectories(parent);
-        Path temporary = Files.createTempFile(parent, ".dao-", ".tmp");
-        try {
-            writeProperties(temporary);
-            moveIntoPlace(temporary, file);
-        } catch (IOException ex) {
-            deleteQuietly(temporary, ex);
-            throw ex;
+        Path lockFile = parent.resolve(name.toString() + ".lock");
+        try (FileChannel channel = FileChannel.open(
+                lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                FileLock fileLock = channel.lock()) {
+            if (!fileLock.isValid()) {
+                throw new IOException("Failed to lock storage");
+            }
+            Path temporary = Files.createTempFile(parent, ".dao-", ".tmp");
+            try {
+                writeProperties(temporary);
+                moveIntoPlace(temporary, file);
+            } catch (IOException ex) {
+                deleteQuietly(temporary, ex);
+                throw ex;
+            }
         }
     }
 
