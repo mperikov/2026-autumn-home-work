@@ -3,6 +3,7 @@ package company.vk.edu.distrib.compute.mperikov.kv;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.http.HttpClient;
 import java.util.NoSuchElementException;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -15,9 +16,11 @@ final class KvHandler implements HttpHandler {
     private static final Logger log = LoggerFactory.getLogger(KvHandler.class);
 
     private final Dao<byte[]> entities;
+    private final KvCoordinator coordinator;
 
-    KvHandler(Dao<byte[]> entities) {
+    KvHandler(int port, Dao<byte[]> entities, HttpClient client) {
         this.entities = entities;
+        coordinator = new KvCoordinator(port, entities, client);
     }
 
     @Override
@@ -49,15 +52,31 @@ final class KvHandler implements HttpHandler {
     }
 
     private void serveEntity(HttpExchange exchange, String method, String path) throws IOException {
+        String query = exchange.getRequestURI().getRawQuery();
         String id = KvCodes.pathId(path);
         if (id.isEmpty()) {
-            id = KvCodes.entityId(exchange.getRequestURI().getRawQuery());
+            id = KvCodes.entityId(query);
         }
         if (id.isEmpty()) {
             sendEmpty(exchange, KvCodes.BAD_REQUEST);
             return;
         }
-        apply(exchange, method, id);
+        if (KvCodes.storedLocally(query)) {
+            apply(exchange, method, id);
+            return;
+        }
+        int[] members = KvCodes.memberPorts();
+        int ack = KvCodes.requiredAck(query, KvCodes.replicaTotal(members));
+        if (ack < 0) {
+            sendEmpty(exchange, KvCodes.BAD_REQUEST);
+            return;
+        }
+        if (members.length == 0) {
+            apply(exchange, method, id);
+            return;
+        }
+        byte[] body = KvCodes.PUT.equals(method) ? readBody(exchange) : new byte[0];
+        coordinator.serve(exchange, method, id, ack, body);
     }
 
     private void apply(HttpExchange exchange, String method, String id) throws IOException {
@@ -100,7 +119,7 @@ final class KvHandler implements HttpHandler {
         }
     }
 
-    private static void sendBytes(HttpExchange exchange, int status, byte[] body) throws IOException {
+    static void sendBytes(HttpExchange exchange, int status, byte[] body) throws IOException {
         exchange.sendResponseHeaders(status, body.length);
         if (body.length == 0) {
             return;
@@ -110,7 +129,7 @@ final class KvHandler implements HttpHandler {
         }
     }
 
-    private static void sendEmpty(HttpExchange exchange, int status) {
+    static void sendEmpty(HttpExchange exchange, int status) {
         try {
             exchange.sendResponseHeaders(status, -1);
         } catch (IOException ex) {
